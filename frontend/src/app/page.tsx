@@ -11,16 +11,10 @@
         </p>
 
         <div className="flex gap-4 justify-center mb-16">
-          
-            href="/patient"
-            className="px-8 py-4 bg-blue-600 text-white text-lg font-semibold rounded-xl hover:bg-blue-700 transition"
-          >
+          <a href="/patient" className="px-8 py-4 bg-blue-600 text-white text-lg font-semibold rounded-xl hover:bg-blue-700 transition">
             I am a Patient
           </a>
-          
-            href="/doctor"
-            className="px-8 py-4 bg-gray-800 text-white text-lg font-semibold rounded-xl hover:bg-gray-900 transition"
-          >
+          <a href="/doctor" className="px-8 py-4 bg-gray-800 text-white text-lg font-semibold rounded-xl hover:bg-gray-900 transition">
             I am a Healthcare Professional
           </a>
         </div>
