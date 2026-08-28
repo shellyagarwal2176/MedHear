@@ -1,0 +1,8 @@
+assistance
+doctor
+help
+hot
+pain
+sick
+skin
+thirsty
