@@ -16,12 +16,12 @@ MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/han
 
 SEQUENCE_LENGTH = 30
 NUM_HAND_LANDMARKS = 21
-FEATURES_PER_FRAME = NUM_HAND_LANDMARKS * 3
+FEATURES_PER_HAND = NUM_HAND_LANDMARKS * 3  # 63
+FEATURES_PER_FRAME = FEATURES_PER_HAND * 2  # 126 (both hands, zero-padded if missing)
 
 VIDEO_EXTENSIONS = {".mov", ".mp4", ".avi"}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
-# Download the model once if not already present
 if not MODEL_PATH.exists():
     print("Downloading hand landmark model...")
     urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
@@ -31,14 +31,15 @@ base_options = mp_python.BaseOptions(model_asset_path=str(MODEL_PATH))
 options = mp_vision.HandLandmarkerOptions(
     base_options=base_options,
     running_mode=mp_vision.RunningMode.IMAGE,
-    num_hands=1,
+    num_hands=2,
     min_hand_detection_confidence=0.5,
 )
 landmarker = mp_vision.HandLandmarker.create_from_options(options)
 
 
 def extract_landmarks_from_frame(frame_bgr):
-    """Run MediaPipe on a single BGR frame, return 63-length landmark vector or None."""
+    """Return a 126-length vector: [Left hand 63 values][Right hand 63 values].
+    Missing hand is zero-padded. Returns None if NO hand at all is detected."""
     rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
     result = landmarker.detect(mp_image)
@@ -46,11 +47,22 @@ def extract_landmarks_from_frame(frame_bgr):
     if not result.hand_landmarks:
         return None
 
-    hand = result.hand_landmarks[0]
-    coords = []
-    for lm in hand:
-        coords.extend([lm.x, lm.y, lm.z])
-    return np.array(coords, dtype=np.float32)
+    left = np.zeros(FEATURES_PER_HAND, dtype=np.float32)
+    right = np.zeros(FEATURES_PER_HAND, dtype=np.float32)
+
+    for hand_landmarks, handedness in zip(result.hand_landmarks, result.handedness):
+        coords = []
+        for lm in hand_landmarks:
+            coords.extend([lm.x, lm.y, lm.z])
+        coords = np.array(coords, dtype=np.float32)
+
+        label = handedness[0].category_name  # "Left" or "Right"
+        if label == "Left":
+            left = coords
+        else:
+            right = coords
+
+    return np.concatenate([left, right])
 
 
 def resample_sequence(frames):
