@@ -3,13 +3,24 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
+const SEQUENCE_LENGTH = 30;
+const CONFIDENCE_THRESHOLD = 0.7;
+const PREDICT_INTERVAL_MS = 1500;
+
 export default function DetectPage() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const bufferRef = useRef<number[][]>([]);
+  const lastPredictTimeRef = useRef<number>(0);
+
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   const [handsDetected, setHandsDetected] = useState(0);
+  const [currentSign, setCurrentSign] = useState<string | null>(null);
+  const [confidence, setConfidence] = useState<number | null>(null);
+  const [lowConfidence, setLowConfidence] = useState(false);
+  const [report, setReport] = useState<string[]>([]);
 
   useEffect(() => {
     const token = localStorage.getItem("medhear_token");
@@ -34,7 +45,7 @@ export default function DetectPage() {
             delegate: "GPU",
           },
           runningMode: "VIDEO",
-          numHands: 2,
+          numHands: 1,
         });
 
         stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -48,6 +59,34 @@ export default function DetectPage() {
       } catch (err) {
         console.error(err);
         setError("Could not start camera or load hand detection. Please allow camera permission and reload.");
+      }
+    }
+
+    async function sendToBackend(sequence: number[][]) {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/predict/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sequence }),
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          console.error(data.error);
+          return;
+        }
+
+        if (data.confidence >= CONFIDENCE_THRESHOLD) {
+          setCurrentSign(data.sign);
+          setConfidence(data.confidence);
+          setLowConfidence(false);
+        } else {
+          setCurrentSign(null);
+          setConfidence(data.confidence);
+          setLowConfidence(true);
+        }
+      } catch (err) {
+        console.error("Prediction request failed", err);
       }
     }
 
@@ -65,7 +104,9 @@ export default function DetectPage() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       setHandsDetected(results.landmarks.length);
 
-      for (const landmarks of results.landmarks) {
+      if (results.landmarks.length > 0) {
+        const landmarks = results.landmarks[0];
+
         const connections: [number, number][] = [
           [0,1],[1,2],[2,3],[3,4],
           [0,5],[5,6],[6,7],[7,8],
@@ -74,7 +115,6 @@ export default function DetectPage() {
           [0,17],[17,18],[18,19],[19,20],
           [5,9],[9,13],[13,17],
         ];
-
         ctx.strokeStyle = "#22c55e";
         ctx.lineWidth = 3;
         for (const [a, b] of connections) {
@@ -85,13 +125,32 @@ export default function DetectPage() {
           ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
           ctx.stroke();
         }
-
         ctx.fillStyle = "#4ade80";
         for (const point of landmarks) {
           ctx.beginPath();
           ctx.arc(point.x * canvas.width, point.y * canvas.height, 4, 0, 2 * Math.PI);
           ctx.fill();
         }
+
+        const flatFrame: number[] = [];
+        for (const p of landmarks) {
+          flatFrame.push(p.x, p.y, p.z);
+        }
+        bufferRef.current.push(flatFrame);
+        if (bufferRef.current.length > SEQUENCE_LENGTH) {
+          bufferRef.current.shift();
+        }
+
+        const now = performance.now();
+        if (
+          bufferRef.current.length === SEQUENCE_LENGTH &&
+          now - lastPredictTimeRef.current > PREDICT_INTERVAL_MS
+        ) {
+          lastPredictTimeRef.current = now;
+          sendToBackend([...bufferRef.current]);
+        }
+      } else {
+        bufferRef.current = [];
       }
 
       animationId = requestAnimationFrame(predictLoop);
@@ -105,11 +164,17 @@ export default function DetectPage() {
     };
   }, [router]);
 
+  function addToReport() {
+    if (currentSign && !report.includes(currentSign)) {
+      setReport([...report, currentSign]);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-gray-900 flex flex-col items-center justify-center px-6 py-10">
       <h1 className="text-2xl font-bold text-white mb-2">Sign Detection</h1>
-      <p className="text-gray-400 mb-6">
-        {ready ? (handsDetected > 0 ? `${handsDetected} hand(s) detected` : "Show your hand to the camera") : "Loading..."}
+      <p className="text-gray-400 mb-4">
+        {ready ? (handsDetected > 0 ? "Hand detected" : "Show your hand to the camera") : "Loading..."}
       </p>
 
       {error && <p className="text-red-400 text-center mb-4 max-w-md">{error}</p>}
@@ -124,9 +189,39 @@ export default function DetectPage() {
         )}
       </div>
 
-      <p className="text-gray-400 mt-6 text-center max-w-md">
-        Next: mapping hand movements to specific medical signs.
-      </p>
+      <div className="mt-6 w-full max-w-2xl bg-gray-800 rounded-xl p-6 text-center">
+        {currentSign ? (
+          <>
+            <p className="text-3xl font-bold text-green-400">{currentSign}</p>
+            <p className="text-gray-400 mt-1">Confidence: {(confidence! * 100).toFixed(0)}%</p>
+            <button
+              onClick={addToReport}
+              className="mt-4 px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition"
+            >
+              Add to Report
+            </button>
+          </>
+        ) : lowConfidence ? (
+          <p className="text-yellow-400 font-semibold">
+            Sign not recognized clearly. Please repeat the sign.
+          </p>
+        ) : (
+          <p className="text-gray-500">Waiting for a clear sign...</p>
+        )}
+      </div>
+
+      {report.length > 0 && (
+        <div className="mt-6 w-full max-w-2xl bg-gray-800 rounded-xl p-6">
+          <p className="text-gray-400 text-sm mb-2">Current Report</p>
+          <div className="flex flex-wrap gap-2">
+            {report.map((sign) => (
+              <span key={sign} className="px-3 py-1 bg-blue-900 text-blue-200 rounded-full text-sm">
+                {sign}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <a href="/patient" className="mt-8 text-blue-400 font-semibold">
         &larr; Back to Dashboard
