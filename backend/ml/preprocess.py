@@ -1,8 +1,10 @@
 import os
+import re
 import cv2
 import numpy as np
 import urllib.request
 from pathlib import Path
+import sys
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
@@ -14,7 +16,9 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 MODEL_PATH = Path("hand_landmarker.task")
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 
-SEQUENCE_LENGTH = 30
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from app.utils.features import order_hands  # noqa: E402
+
 NUM_HAND_LANDMARKS = 21
 FEATURES_PER_HAND = NUM_HAND_LANDMARKS * 3  # 63
 FEATURES_PER_FRAME = FEATURES_PER_HAND * 2  # 126 (both hands, zero-padded if missing)
@@ -38,8 +42,8 @@ landmarker = mp_vision.HandLandmarker.create_from_options(options)
 
 
 def extract_landmarks_from_frame(frame_bgr):
-    """Return a 126-length vector: [Left hand 63 values][Right hand 63 values].
-    Missing hand is zero-padded. Returns None if NO hand at all is detected."""
+    """Return a raw 126-vector (pixel-like units, hands ordered by wrist x), or None if no hand."""
+    h, w = frame_bgr.shape[:2]
     rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
     result = landmarker.detect(mp_image)
@@ -47,104 +51,92 @@ def extract_landmarks_from_frame(frame_bgr):
     if not result.hand_landmarks:
         return None
 
-    left = np.zeros(FEATURES_PER_HAND, dtype=np.float32)
-    right = np.zeros(FEATURES_PER_HAND, dtype=np.float32)
-
-    for hand_landmarks, handedness in zip(result.hand_landmarks, result.handedness):
-        coords = []
-        for lm in hand_landmarks:
-            coords.extend([lm.x, lm.y, lm.z])
-        coords = np.array(coords, dtype=np.float32)
-
-        label = handedness[0].category_name  # "Left" or "Right"
-        if label == "Left":
-            left = coords
-        else:
-            right = coords
-
-    return np.concatenate([left, right])
-
-
-def resample_sequence(frames):
-    n = len(frames)
-    if n == SEQUENCE_LENGTH:
-        return frames
-    indices = np.linspace(0, n - 1, SEQUENCE_LENGTH).astype(int)
-    return frames[indices]
+    hands = []
+    for hand_landmarks in result.hand_landmarks:
+        coords = np.array([[lm.x * w, lm.y * h, lm.z * w] for lm in hand_landmarks], dtype=np.float32)
+        hands.append(coords)
+    return order_hands(hands)
 
 
 def process_video(path):
+    """One sample per frame that has a hand."""
     cap = cv2.VideoCapture(str(path))
-    frame_landmarks = []
+    samples = []
     while True:
         ret, frame = cap.read()
         if not ret:
             break
         lm = extract_landmarks_from_frame(frame)
         if lm is not None:
-            frame_landmarks.append(lm)
+            samples.append(lm)
     cap.release()
-
-    if len(frame_landmarks) == 0:
-        return None
-
-    frame_landmarks = np.array(frame_landmarks)
-    return resample_sequence(frame_landmarks)
+    return samples
 
 
 def process_image(path):
     frame = cv2.imread(str(path))
     if frame is None:
-        return None
+        return []
     lm = extract_landmarks_from_frame(frame)
-    if lm is None:
-        return None
-    return np.tile(lm, (SEQUENCE_LENGTH, 1))
+    return [] if lm is None else [lm]
+
+
+def signer_of(name):
+    m = re.match(r"U(\d+)_", name) or re.search(r"User_?(\d+)", name)
+    return int(m.group(1)) if m else -1
 
 
 def main():
     X = []
     y = []
+    groups = []  # source file index, so train/test can be split by file
+    users = []  # signer id parsed from the file name (U3_..., ..._User2_...), -1 when unknown
     labels = sorted([d.name for d in RAW_DATA_DIR.iterdir() if d.is_dir()])
     print(f"Found {len(labels)} word classes: {labels}")
 
+    file_id = 0
     for label in labels:
         word_dir = RAW_DATA_DIR / label
-        files = list(word_dir.iterdir())
+        files = sorted(word_dir.iterdir())
         print(f"\nProcessing '{label}' ({len(files)} files)...")
 
         success_count = 0
         for f in files:
             ext = f.suffix.lower()
-            sequence = None
-
             if ext in VIDEO_EXTENSIONS:
-                sequence = process_video(f)
+                samples = process_video(f)
             elif ext in IMAGE_EXTENSIONS:
-                sequence = process_image(f)
+                samples = process_image(f)
             else:
                 continue
 
-            if sequence is not None:
-                X.append(sequence)
-                y.append(label)
+            if samples:
                 success_count += 1
+                for s_ in samples:
+                    X.append(s_)
+                    y.append(label)
+                    groups.append(file_id)
+                    users.append(signer_of(f.name))
+            file_id += 1
 
         print(f"  -> {success_count}/{len(files)} files yielded valid hand landmarks")
 
     X = np.array(X, dtype=np.float32)
     y = np.array(y)
+    groups = np.array(groups)
 
     print(f"\nFinal dataset shape: X={X.shape}, y={y.shape}")
 
     np.save(OUTPUT_DIR / "X.npy", X)
     np.save(OUTPUT_DIR / "y.npy", y)
+    np.save(OUTPUT_DIR / "groups.npy", groups)
+    np.save(OUTPUT_DIR / "users.npy", np.array(users))
 
     label_list = sorted(set(y.tolist()))
     with open(OUTPUT_DIR / "labels.txt", "w") as f:
         f.write("\n".join(label_list))
 
-    print(f"\nSaved to {OUTPUT_DIR}/ (X.npy, y.npy, labels.txt)")
+    print(f"\nSaved to {OUTPUT_DIR}/ (X.npy, y.npy, groups.npy, labels.txt)")
 
 
 if __name__ == "__main__":

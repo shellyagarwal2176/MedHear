@@ -1,10 +1,12 @@
-﻿export default function ReportsPage() {
+"use client";
+import AppShell, { PageHeader } from "../../../components/AppShell";
+import ReportList from "../../../components/ReportList";
+
+export default function ReportsPage() {
   return (
-    <main className="min-h-screen bg-white flex items-center justify-center">
-      <div className="text-center px-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-3">Previous Reports</h1>
-        <p className="text-gray-600">Your saved medical reports will appear here.</p>
-      </div>
-    </main>
+    <AppShell role="patient">
+      <PageHeader title="Reports & messages" subtitle="What you sent to your care team, and their response." />
+      <ReportList mode="patient" />
+    </AppShell>
   );
 }

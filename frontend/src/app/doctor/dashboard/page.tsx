@@ -1,10 +1,12 @@
-﻿export default function DoctorDashboard() {
+"use client";
+import AppShell, { PageHeader } from "../../../components/AppShell";
+import ReportList from "../../../components/ReportList";
+
+export default function DoctorDashboard() {
   return (
-    <main className="min-h-screen bg-white flex items-center justify-center">
-      <div className="text-center px-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-3">Healthcare Professional Dashboard</h1>
-        <p className="text-gray-600">Patient reports and review tools will go here.</p>
-      </div>
-    </main>
+    <AppShell role="doctor" wide>
+      <PageHeader title="Patient reports" subtitle="Review what patients signed, add notes, and confirm." />
+      <ReportList mode="doctor" />
+    </AppShell>
   );
 }

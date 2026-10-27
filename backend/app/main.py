@@ -1,6 +1,6 @@
 ﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth , predict
+from app.routers import auth, predict, profile, reports, teach
 app = FastAPI(title="MedHear API")
 app.add_middleware(
     CORSMiddleware,
@@ -11,6 +11,9 @@ app.add_middleware(
 )
 app.include_router(auth.router)
 app.include_router(predict.router)
+app.include_router(reports.router)
+app.include_router(profile.router)
+app.include_router(teach.router)
 @app.get("/")
 async def root():
     return {"status": "MedHear API running"}

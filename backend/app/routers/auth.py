@@ -1,11 +1,14 @@
 ﻿from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from app.models.user import UserRegister, UserLogin
+from app.config import DOCTOR_INVITE_CODE
 from app.database import users_collection
 from app.utils.security import hash_password, verify_password, create_access_token
 router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register")
 async def register(user: UserRegister):
+    if user.role == "doctor" and (not DOCTOR_INVITE_CODE or user.invite_code != DOCTOR_INVITE_CODE):
+        raise HTTPException(status_code=403, detail="Invalid invite code for healthcare professional accounts")
     existing = await users_collection.find_one({"email": user.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")

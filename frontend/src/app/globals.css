@@ -1,8 +1,40 @@
 @import "tailwindcss";
 
+/* MedHear theme: calm teal on pale sky, serif headings. Overriding the blue and gray scales here
+   re-themes every existing utility class (bg-blue-600, text-gray-500, ...) in one place. */
+@theme {
+  --color-blue-50: #eef7fb;
+  --color-blue-100: #dff0f8;
+  --color-blue-200: #c3e2f1;
+  --color-blue-300: #94c9e0;
+  --color-blue-400: #5ea7c8;
+  --color-blue-500: #3a88ad;
+  --color-blue-600: #2d6e8f;
+  --color-blue-700: #265a76;
+  --color-blue-800: #1f4a62;
+  --color-blue-900: #173a4d;
+
+  --color-gray-50: #f6f9fb;
+  --color-gray-100: #eef3f6;
+  --color-gray-200: #dfe7ec;
+  --color-gray-300: #c6d2da;
+  --color-gray-400: #94a5b1;
+  --color-gray-500: #67798a;
+  --color-gray-600: #4e5f6e;
+  --color-gray-700: #3a4957;
+  --color-gray-800: #263540;
+  --color-gray-900: #14232d;
+
+  --color-brand: #2d6e8f;
+  --color-brand-deep: #1d4d66;
+  --color-ink: #12303d;
+  --color-sky: #def2fb;
+  --color-paper: #f6fafc;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f6fafc;
+  --foreground: #14232d;
 }
 
 @theme inline {
@@ -10,17 +42,184 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-display: var(--font-lora);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-lora), Georgia, serif;
+  letter-spacing: -0.01em;
+}
+
+/* Keyboard focus that is easy to see on every control */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+input,
+select,
+textarea {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 18%, transparent);
+}
+
+/* ---- Landing page ---- */
+.mh-hero {
+  background:
+    radial-gradient(1100px 420px at 50% -10%, rgba(255, 255, 255, 0.14), transparent 60%),
+    linear-gradient(180deg, #2a6482 0%, #2d6e8f 55%, #3a7e9f 100%);
+}
+.mh-float {
+  animation: mh-bob 6s ease-in-out infinite;
+}
+.mh-float-slow {
+  animation: mh-bob 8s ease-in-out infinite reverse;
+}
+@keyframes mh-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mh-float, .mh-float-slow { animation: none; }
+}
+
+/* ---- Body part selector ---- */
+.mh-part {
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.mh-shape {
+  fill: url(#mh-body-grad);
+  stroke: #94a3b8;
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: fill 0.2s ease, stroke 0.2s ease, transform 0.2s ease, filter 0.2s ease;
+}
+.mh-part:hover .mh-shape,
+.mh-part:focus-visible .mh-shape {
+  fill: #dff0f8;
+  stroke: #2d6e8f;
+  stroke-width: 2;
+  transform: scale(1.03);
+}
+.mh-part:active .mh-shape {
+  transform: scale(0.97);
+}
+.mh-part[data-selected="true"] .mh-shape {
+  fill: var(--mh-color, #2d6e8f);
+  stroke: color-mix(in srgb, var(--mh-color, #2d6e8f) 65%, black);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--mh-color, #2d6e8f) 75%, transparent));
+  animation: mh-pop 0.4s ease-out;
+}
+.mh-part:not([data-selected="true"]) .mh-shape {
+  filter: drop-shadow(0 1.5px 2px rgba(15, 23, 42, 0.18));
+}
+.mh-decor path {
+  fill: none;
+  stroke: rgba(71, 85, 105, 0.35);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+.mh-pulse {
+  fill: none;
+  stroke: var(--mh-color, #2d6e8f);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mh-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+.mh-ripple {
+  fill: rgba(37, 99, 235, 0.35);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mh-ripple 0.7s ease-out forwards;
+}
+.mh-hint-dot {
+  fill: #2563eb;
+}
+.mh-hint-ring {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mh-pulse 1.5s ease-out infinite;
+}
+.mh-body {
+  animation: mh-breathe 5s ease-in-out infinite;
+  transform-origin: 50% 60%;
+  overflow: visible;
+}
+.mh-rise {
+  animation: mh-rise 0.6s ease-out both;
+}
+.mh-chip-in {
+  animation: mh-chip-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.mh-slide-up {
+  animation: mh-slide-up 0.35s ease-out both;
+}
+
+@keyframes mh-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+@keyframes mh-pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+@keyframes mh-ripple {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(9); opacity: 0; }
+}
+@keyframes mh-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.012); }
+}
+@keyframes mh-rise {
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes mh-chip-in {
+  0% { opacity: 0; transform: scale(0.6); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes mh-slide-up {
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mh-body, .mh-pulse, .mh-ripple, .mh-hint-ring, .mh-rise, .mh-chip-in, .mh-slide-up,
+  .mh-part[data-selected="true"] .mh-shape {
+    animation: none !important;
+  }
+  .mh-shape { transition: none !important; }
+}
+
+/* Print just the report card that was chosen */
+@media print {
+  body * { visibility: hidden; }
+  .mh-print-target, .mh-print-target * { visibility: visible; }
+  .mh-print-target { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: none; animation: none !important; }
+  .mh-no-print { display: none !important; }
 }

@@ -6,6 +6,7 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str
     role: Literal["patient", "doctor"]
+    invite_code: str | None = None
 class UserLogin(BaseModel):
     email: EmailStr
     password: str

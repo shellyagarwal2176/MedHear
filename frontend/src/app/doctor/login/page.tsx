@@ -1,6 +1,8 @@
-﻿"use client";
+"use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { setToken } from "../../../lib/auth";
+import AuthLayout, { inputClass } from "../../../components/AuthLayout";
 
 export default function DoctorLogin() {
   const [email, setEmail] = useState("");
@@ -19,15 +21,17 @@ export default function DoctorLogin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.status >= 500) {
+        throw new Error("The server is having trouble right now. Please try again in a moment.");
+      }
       if (!res.ok) {
         throw new Error(data.detail || "Login failed");
       }
       if (data.role !== "doctor") {
         throw new Error("This login is for healthcare professionals only.");
       }
-      localStorage.setItem("medhear_token", data.access_token);
-      localStorage.setItem("medhear_role", data.role);
+      setToken("doctor", data.access_token);
       router.push("/doctor/dashboard");
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -37,21 +41,47 @@ export default function DoctorLogin() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
-      <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2 text-center">Healthcare Professional Login</h1>
-        <p className="text-gray-600 mb-8 text-center">Access your patient dashboard</p>
+    <AuthLayout
+      role="doctor"
+      title="Professional login"
+      subtitle="Access your patient reports"
+      footer={
+        <>
+          New here? <a href="/doctor/register" className="text-brand font-semibold">Create a professional account</a>
+          <span className="block mt-2 text-sm">
+            Patient? <a href="/patient/login" className="text-brand font-semibold">Patient login</a>
+          </span>
+        </>
+      }
+    >
+      {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3">{error}</p>}
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <input type="email" placeholder="Work email" required value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+        <input type="password" placeholder="Password" required value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
+        <button type="submit" disabled={loading} className="w-full py-3 bg-ink text-white font-semibold rounded-xl hover:bg-brand-deep transition disabled:opacity-50">
+          {loading ? "Logging in..." : "Log in"}
+        </button>
+      </form>
 
-        {error && <p className="text-red-600 text-sm mb-4 text-center">{error}</p>}
-
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <input type="email" placeholder="Work Email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-lg" />
-          <input type="password" placeholder="Password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-lg" />
-          <button type="submit" disabled={loading} className="w-full py-3 bg-gray-900 text-white text-lg font-semibold rounded-lg hover:bg-gray-800 transition disabled:opacity-50">
-            {loading ? "Logging in..." : "Log In"}
-          </button>
-        </form>
+      <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm">
+        <p className="font-semibold text-blue-900 mb-2">Demo account</p>
+        <p className="text-gray-700">
+          Email: <span className="font-mono font-semibold">doctor@example.com</span>
+        </p>
+        <p className="text-gray-700">
+          Password: <span className="font-mono font-semibold">MedHear@2026</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setEmail("doctor@example.com");
+            setPassword("MedHear@2026");
+          }}
+          className="mt-3 text-blue-700 font-semibold hover:text-blue-900"
+        >
+          Fill in for me
+        </button>
       </div>
-    </main>
+    </AuthLayout>
   );
 }
